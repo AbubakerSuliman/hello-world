@@ -1,0 +1,114 @@
+library(shiny)
+library(dplyr)
+library(plotly)
+library(tidyverse)
+CR <- read_excel("Cars.xlsx")
+
+ui<-shinyUI(fluidPage(
+  titlePanel("CARS"),
+  sidebarLayout(
+    sidebarPanel(
+      sliderInput("SLIDER", "budget", min = 0,max = 10000,value = 1000),
+      selectInput("X1","PN",choices=unique(CR$category),selected = "HONDA"),
+      selectInput("X2","PP",choices=NULL),
+      selectInput("GOL","GOL",choices=unique(CR$obj),selected = "PROFIT"),
+      selectInput("X3","DG",choices= c("All",unique(CR$Displacement)),selected = "All"),
+      selectInput("X4","MB",choices=c("All", unique(CR$Options)),selected = "All"),
+      selectInput("X5","CN",choices=c("All", unique(CR$Airbag)),selected = "All"),
+      selectInput("X6","CH",choices=c("All", unique(CR$Sunroof)),selected = "All"),
+      selectInput("X8","NOOC",choices=c(5,10,15),selected = 5),
+      selectInput("X7","CLS",choices=c("All", unique(CR$Export_destnation)),selected = "All")),
+    mainPanel(
+      mainPanel(plotlyOutput("outplot"))
+    ))))
+
+#server code
+server<-function(input,output,session){
+  
+  CR1<-
+    mutate(CR,
+           concated_column = paste(Options,Export_destnation, sep = '_'))
+  # CR6<-reactive({
+  #   head(CR1,as.integer(input$f8))
+  #   CR7<-as.data.frame(CR6)
+  #   
+  #   print(CR6())})
+  
+  observe({
+    print(input$X1)
+    CR2<-CR1%>%filter(category==input$X1)
+    updateSelectInput(session,"X2","PP",choices=unique(CR2$Model))
+    print(CR2)
+    print(input$GOL)
+    CR3<-reactive({
+      browser()
+      lst <- list(Displacement=input$X3, Options=input$X4, Airbag=input$X5, Sunroof=input$X6, Export_destnation=input$X7)
+      
+      lst_notall <- lst[lst!="All"]
+      #The Following solution from https://stackoverflow.com/questions/49075824/using-tidy-eval-for-multiple-dplyr-filter-conditions?noredirect=1&lq=1
+      conds <- imap(lst_notall, function(x,y) quo(!!sym(y) == !!x)) %>% unname()
+      
+      filter(CR2, !!!conds)
+      
+      # if(input$X3 == "All" & input$X4 == "All"& input$X5 == "All"& input$X6 == "All"& input$X7 == "All"){CR2}
+      # else if(input$X3 == "All" & input$X4 == "All"& input$X5 == "All"& input$X6 == "All"& input$X7 != "All")
+      # {CR2[which(CR2$Export_destnation==input$X7),]}
+      # else if(input$X3 == "All" & input$X4 == "All"& input$X5 == "All"& input$X6 != "All"& input$X7 == "All")
+      # {CR2[which(CR2$Sunroof==input$X6),]}
+      # else if(input$X3 == "All" & input$X4 == "All"& input$X5 != "All"& input$X6 == "All"& input$X7 == "All")
+      # {CR2[which(CR2$Airbag==input$X5),]}
+      # else if(input$X3 == "All" & input$X4 != "All"& input$X5 == "All"& input$X6 == "All"& input$X7 == "All")
+      # {CR2[which(CR2$Options==input$X4),]}
+      # else if(input$X3 != "All" & input$X4 == "All"& input$X5 == "All"& input$X6 == "All"& input$X7 == "All")
+      # {CR2[which(CR2$Displacement==input$X3),]}
+      # else if(input$X3 != "All" & input$X4 != "All"& input$X5 == "All"& input$X6 == "All"& input$X7 == "All")
+      # {browser()
+      #   CR2[which(CR2$Displacement==input$X3& CR2$Options==input$X4),]}
+      # else{CR2[which(CR2$Displacement == input$X3 & CR2$Options==input$X4& CR2$Airbag==input$X5&
+      #                  CR2$Sunroof==input$X6& CR2$Export_destnation==input$X7),]}
+    })
+    print(CR3())
+    objysum<- reactive({CR3()%>% pull(input$GOL) %>% sum()})
+    print(objysum())
+    CR4<-reactive({CR3()%>%
+        dplyr::arrange(dplyr::desc(!!rlang::sym(input$GOL)))
+    })
+  #   CR5<-reactive({
+  #     #browser()
+  #     mutate(CR4(),!!quo_name(paste0(input$GOL,'_measure')):=(!!sym(input$GOL)/objysum())*input$SLIDER)
+  #   })
+  #   print(CR5())
+  #   print(str(CR5()))
+  #   print(CR5()$concated_column)
+  #   
+  #   CR6<-reactive({
+  #     #browser()
+  #     head(CR5(),as.integer(input$X8))
+  #   })
+  #   print(CR6())
+  #   
+  #   output$outplot <- renderPlotly({
+  #     outplot <- plot_ly(CR6(), x = ~concated_column, y = ~get(paste0(input$GOL,'_measure')), type = "bar", color= ~concated_column)
+  #   })
+  # })
+    
+    CR5<-reactive({           
+      CR4() %>%              
+        head(n=as.integer(input$X8))       
+    })
+    
+    CR6<-reactive({
+      #browser()
+      mutate(CR5(),!!quo_name(paste0(input$GOL,'_measure')):=(!!sym(input$GOL)/objysum())*input$SLIDER)
+    })
+    print(CR6())
+    print(str(CR6()))
+    print(CR6()$concated_column)
+    
+    output$outplot <- renderPlotly({
+      outplot <- plot_ly(CR6(), x = ~concated_column, y = ~get(paste0(input$GOL,'_measure')), type = "bar", color= ~concated_column)
+    })
+  })
+}
+
+shinyApp(ui, server)
